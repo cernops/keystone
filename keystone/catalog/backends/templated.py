@@ -95,7 +95,7 @@ class Catalog(kvs.Catalog):
                            'service_id', 'url']
 
     def __init__(self, templates=None):
-        super(Catalog, self).__init__()
+        super(Catalog, self).__init__(None)
         if templates:
             self.templates = templates
         else:
