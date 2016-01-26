@@ -215,7 +215,9 @@ class ProjectV3(controller.V3Controller):
     @controller.protected()
     @validation.validated(schema.project_create, 'project')
     def create_project(self, context, project):
-        ref = self._assign_unique_id(self._normalize_dict(project))
+        ref = self._normalize_dict(project)
+        if not ref.get('id'):
+            ref = self._assign_unique_id(ref)
         ref = self._normalize_domain_id(context, ref)
 
         if ref.get('is_domain'):
