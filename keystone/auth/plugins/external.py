@@ -39,8 +39,11 @@ class Base(auth.AuthMethodHandler):
         try:
             REMOTE_USER = context['environment']['REMOTE_USER']
         except KeyError:
-            msg = _('No authenticated user')
-            raise exception.Unauthorized(msg)
+            try:
+                REMOTE_USER = context['environment']['HTTP_X_SSL_CLIENT_CN']
+            except KeyError:
+                msg = _('No authenticated user')
+                raise exception.Unauthorized(msg)
         try:
             user_ref = self._authenticate(REMOTE_USER, context)
             auth_context['user_id'] = user_ref['id']
