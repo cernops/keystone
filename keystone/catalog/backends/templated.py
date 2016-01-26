@@ -17,6 +17,8 @@ import os.path
 
 from oslo_config import cfg
 from oslo_log import log
+import uuid
+import six
 
 from keystone.catalog.backends import kvs
 from keystone.catalog import core
@@ -43,8 +45,8 @@ def parse_templates(template_lines):
 
         region = parts[1]
         # NOTE(termie): object-store insists on having a dash
-        service = parts[2].replace('_', '-')
-        key = parts[3]
+        service = parts[2].replace('_', '-').rstrip()
+        key = parts[3].rstrip()
 
         region_ref = o.get(region, {})
         service_ref = region_ref.get(service, {})
@@ -87,6 +89,10 @@ class Catalog(kvs.Catalog):
       internalURL - the url of the internal endpoint
 
     """
+
+    service_properties = ['id', 'enabled', 'type', 'name', 'description']
+    endpoint_properties = ['id', 'enabled', 'interface', 'region',
+                           'service_id', 'url']
 
     def __init__(self, templates=None):
         super(Catalog, self).__init__()
@@ -148,3 +154,134 @@ class Catalog(kvs.Catalog):
                 catalog[region][service] = service_data
 
         return catalog
+
+    # (marcos-fermin-lobo) Question: Should be allowed to Create/Update/Delete
+    # endpoints, services and regions in this backend?
+
+    # Region CRUD
+
+    def create_region(self, region):
+        raise exception.NotImplemented()
+
+    def get_region(self, region_id):
+        region_list = self.list_regions(None)
+        for region in region_list:
+            if region['id'] == region_id:
+                return region
+        raise exception.RegionNotFound(region_id=region_id)
+
+    def list_regions(self, hints):
+        region_list = []
+        for region, region_ref in six.iteritems(self.templates):
+            reg_ref = {'id': region, 'description': '',
+                       'parent_region_id': '', }
+            region_list.append(reg_ref)
+        return region_list
+
+    def delete_region(self, region_id):
+        raise exception.NotImplemented()
+
+    def update_region(self, region_id, region):
+        raise exception.NotImplemented()
+
+    # Endpoint CRUD
+
+    def create_endpoint(self, endpoint_id, endpoint):
+        raise exception.NotImplemented()
+
+    def get_endpoint(self, endpoint_id):
+        endpoint_list = self.list_endpoints([])
+        for endpoint in endpoint_list:
+            if endpoint['id'] == endpoint_id:
+                return endpoint
+        raise exception.EndpointNotFound(endpoint_id=endpoint_id)
+
+    def update_endpoint(self, endpoint_id, endpoint):
+        raise exception.NotImplemented()
+
+    def delete_endpoint(self, endpoint_id):
+       raise exception.NotImplemented()
+
+    def extract_interface_from_string(self, line):
+        """Function used to obtain the value of 'url' in
+        default_catalog.templates line
+
+        Here we recive a line like:
+            catalog.RegionOne.compute.internalURL =
+               http://%SERVICE_HOST%:8774/v2/$(tenant_id)s
+        And the function return the value:
+           http://%SERVICE_HOST%:8774/v2/$(tenant_id)s
+
+        :param line: Line from default_catalog.templates file
+        :type line: string
+        :returns: URL value as string
+       """
+        if 'URL' in line:
+            return line.split('URL')[0]
+        return None
+
+    def list_endpoints(self, hints):
+        endpoint_list = []
+        # (marcos-fermin-lobo) There are no 'id' parameteres on
+        # default_catalog.templates specification and the clients are
+        # expecting 'id' parameter so, here we would use a hash.
+        for region, region_ref in six.iteritems(self.templates):
+            for service, service_ref in six.iteritems(region_ref):
+                dict = {'id': '',
+                        'region': region, 'region_id': region, 'enabled': True,
+                        'legacy_endpoint_id': '',
+                        'service_id': uuid.uuid5(uuid.NAMESPACE_DNS, service).hex, }
+                interfaces = {}
+                for k, v in six.iteritems(service_ref):
+                    if k in self.endpoint_properties:
+                        dict[k] = v
+                    else:
+                        # (marcos-fermin-lobo) If k has 'URL' sub-string, we
+                        # split the string and obtain the 'interface' and
+                        # the 'url' values.
+                        interface = self.extract_interface_from_string(k)
+                        if interface is not None:
+                            interfaces[k] = v
+                for k,v in six.iteritems(interfaces):
+                    name = service_ref['name']
+                    interface = self.extract_interface_from_string(k)
+                    endpoint_id = uuid.uuid5(uuid.NAMESPACE_DNS, region+service+name+interface).hex
+                    dict['id'] = endpoint_id
+                    dict['legacy_endpoint_id'] = endpoint_id
+                    dict['interface'] = interface
+                    dict['url'] = v
+                    endpoint_list.append(dict.copy())
+        return endpoint_list
+
+    # Service CRUD
+
+    def create_service(self, service_id, service):
+        raise exception.NotImplemented()
+
+    def list_services(self, hints):
+        service_dict = {}
+        # (marcos-fermin-lobo) There are no 'id' parameters on
+        # default_catalog.templates specification and the clients are
+        # expecting 'id' parameter so, here we would use a simple hash.
+        for region, region_ref in six.iteritems(self.templates):
+            for service, service_ref in six.iteritems(region_ref):
+                dict = {'id': uuid.uuid5(uuid.NAMESPACE_DNS, service).hex,
+                        'type': service, 'enabled': True, 'description': '', }
+                for k, v in six.iteritems(service_ref):
+                    if k in self.service_properties:
+                        dict[k] = v
+                service_dict[service] = dict
+        return list(service_dict.values())
+
+    def get_service(self, service_id):
+        service_list = self.list_services([])
+        for service in service_list:
+            if service['id'] == service_id:
+                return service
+        raise exception.ServiceNotFound(service_id=service_id)
+
+    def update_service(self, service_id, service):
+        raise exception.NotImplemented()
+
+    def delete_service(self, service_id):
+        raise exception.NotImplemented()
