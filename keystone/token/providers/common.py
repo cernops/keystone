@@ -395,7 +395,7 @@ class V3TokenDataHelper(object):
                                 'user_id': user_id,
                                 'domain_id': token_domain_id}
                 LOG.debug(msg)
-                raise exception.Unauthorized(msg)
+                raise exception.Forbidden(msg)
 
             token_data['roles'] = filtered_roles
 
