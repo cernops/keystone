@@ -67,6 +67,9 @@ class Manager(manager.Manager):
     def _get_endpoint_groups_for_project(self, project_id):
         # recover the project endpoint group memberships and for each
         # membership recover the endpoint group
+        if not project_id:
+            return []
+
         self.resource_api.get_project(project_id)
         try:
             refs = self.driver.list_endpoint_groups_for_project(
