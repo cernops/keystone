@@ -343,7 +343,9 @@ class Manager(manager.Manager):
         for endpoint in endpoints:
             is_candidate = True
             for key, value in filters.items():
-                if endpoint[key] != value:
+                if not isinstance(value, list):
+                    value = [value]
+                if endpoint[key] not in value:
                     is_candidate = False
                     break
             if is_candidate:
