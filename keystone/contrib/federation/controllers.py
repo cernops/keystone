@@ -315,11 +315,15 @@ class Auth(auth_controllers.Auth):
         ref = self.federation_api.get_idp_from_remote_id(remote_id)
         # NOTE(stevemar): the returned object is a simple dict that
         # contains the idp_id and remote_id.
-        identity_provider = ref['idp_id']
-        res = self.federated_authentication(context, identity_provider,
-                                            protocol_id)
-        token_id = res.headers['X-Subject-Token']
-        return self.render_html_response(host, token_id)
+        try:
+            identity_provider = ref['idp_id']
+            res = self.federated_authentication(context, identity_provider,
+                                                protocol_id)
+            token_id = res.headers['X-Subject-Token']
+            return self.render_html_response(host, token_id)
+        except exception.Unauthorized as e:
+            LOG.error(e)
+            return self.render_html_response(host, None)
 
     def federated_idp_specific_sso_auth(self, context, idp_id, protocol_id):
         host = self._get_sso_origin_host(context)
