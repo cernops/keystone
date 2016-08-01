@@ -605,6 +605,8 @@ FILE_OPTIONS = {
                     help='Delete subtrees using the subtree delete control. '
                          'Only enable this option if your LDAP server '
                          'supports subtree deletion.'),
+        cfg.BoolOpt('nested_groups_enabled', default=False,
+                    help='Allows nested group search in Active Directory'),
         cfg.StrOpt('query_scope', default='one',
                    choices=['one', 'sub'],
                    help='The LDAP scope for queries, "one" represents '

@@ -329,6 +329,7 @@ class GroupApi(common_ldap.BaseLdap):
 
     def __init__(self, conf):
         super(GroupApi, self).__init__(conf)
+        self.nested_enabled = conf.ldap.nested_groups_enabled
         self.member_attribute = (conf.ldap.group_member_attribute
                                  or self.DEFAULT_MEMBER_ATTRIBUTE)
 
@@ -378,17 +379,61 @@ class GroupApi(common_ldap.BaseLdap):
     def list_user_groups(self, user_dn):
         """Return a list of groups for which the user is a member."""
         user_dn_esc = ldap.filter.escape_filter_chars(user_dn)
-        query = '(%s=%s)%s' % (self.member_attribute,
-                               user_dn_esc,
-                               self.ldap_filter or '')
-        return self.get_all(query)
+        if not self.nested_enabled:
+            query = '(%s=%s)%s' % (self.member_attribute,
+                                   user_dn_esc,
+                                   self.ldap_filter or '')
+            return self.get_all(query)
+
+        memberships = []
+        sids = []
+        try:
+            conn = self.get_connection()
+            sids = conn.search_s(user_dn_esc,
+                                 ldap.SCOPE_BASE,
+                                 '(objectClass=%s)' % CONF.ldap.user_objectclass,
+                                 ['tokenGroups'])[0][1]['tokenGroups']
+        except ldap.NO_SUCH_OBJECT:
+            pass
+        finally:
+            conn.unbind_s()
+
+        groups_query = ''.join(['(objectSID=%s)' % sid for sid in sids])
+        query = '(&(objectClass=%s)(|%s)%s)' % (self.object_class,
+                                                groups_query,
+                                                self.ldap_filter or '')
+        for m in self.get_all(query):
+            memberships.append(m)
+        return memberships
 
     def list_user_groups_filtered(self, user_dn, hints):
         """Return a filtered list of groups for which the user is a member."""
         user_dn_esc = ldap.filter.escape_filter_chars(user_dn)
-        query = '(%s=%s)' % (self.member_attribute,
-                             user_dn_esc)
-        return self.get_all_filtered(hints, query)
+        if not self.nested_enabled:
+            query = '(%s=%s)' % (self.member_attribute,
+                                   user_dn_esc)
+            return self.get_all_filtered(hints, query)
+
+        memberships = []
+        sids = []
+        try:
+            conn = self.get_connection()
+            sids = conn.search_s(user_dn_esc,
+                                 ldap.SCOPE_BASE,
+                                 '(objectClass=%s)' % CONF.ldap.user_objectclass,
+                                 ['tokenGroups'])[0][1]['tokenGroups']
+        except ldap.NO_SUCH_OBJECT:
+            pass
+        finally:
+            conn.unbind_s()
+
+        groups_query = ''.join(['(objectSID=%s)' % sid for sid in sids])
+        query = '(&(objectClass=%s)(|%s)%s)' % (self.object_class,
+                                                groups_query,
+                                                self.ldap_filter or '')
+        for m in self.get_all_filtered(hints, query):
+            memberships.append(m)
+        return memberships
 
     def list_group_users(self, group_id):
         """Return a list of user dns which are members of a group."""

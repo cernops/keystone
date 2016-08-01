@@ -17,6 +17,7 @@ import codecs
 import functools
 import os.path
 import re
+import struct
 import sys
 import weakref
 
@@ -170,7 +171,7 @@ def convert_ldap_result(ldap_result):
         for kind, values in attrs.items():
             try:
                 val2py = enabled2py if kind == 'enabled' else ldap2py
-                ldap_attrs[kind] = [val2py(x) for x in values]
+                ldap_attrs[kind] = [sid2str(x) if kind == 'tokenGroups' else val2py(x) for x in values]
             except UnicodeDecodeError:
                 LOG.debug('Unable to decode value for attribute %s', kind)
 
@@ -180,6 +181,19 @@ def convert_ldap_result(ldap_result):
                    'chasing in keystone.conf via [ldap] chase_referrals'))
 
     return py_result
+
+
+def sid2str(sid):
+    """Transforms SID info (utf8) to string
+    """
+    srl = ord(sid[0])
+    number_sub_id = ord(sid[1])
+    iav = struct.unpack('!Q','\x00\x00'+sid[2:8])[0]
+    sub_ids = [struct.unpack('<I',sid[8+4*i:12+4*i])[0]
+               for i in range(number_sub_id)]
+    return 'S-%d-%d-%s' % (srl,
+                           iav,
+                           '-'.join([str(s) for s in sub_ids]),)
 
 
 def safe_iter(attrs):
